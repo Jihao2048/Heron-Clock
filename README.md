@@ -24,3 +24,20 @@ An elegant, smooth-animation ESP32-C3 desk clock featuring real-time weather, NT
    ```cpp
    #define WIFI_SSID "Your_SSID"
    #define WIFI_PASS "Your_Password"
+
+## 📷 Pictures
+
+### 🕒 Main Interface
+The clock interface features a clean layout with time, date, and real-time weather.
+<p align="center">
+  <img src="1.jpg" width="400">
+</p>
+
+### 📱 Smooth Menu System
+Fluid easing animations for seamless navigation between settings and apps.
+<p align="center">
+  <img src="2.jpg" width="400">
+</p>
+
+---
+> **Tip:** To get the best results, use a tripod when photographing your OLED screen to avoid blur!
