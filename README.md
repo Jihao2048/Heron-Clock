@@ -41,4 +41,4 @@ Fluid easing animations for seamless navigation between settings and apps.
 </p>
 
 ---
-> **Tip:** To get the best results, use a tripod when photographing your OLED screen to avoid blur!
+> this program Gemini wrote it.
