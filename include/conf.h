@@ -8,8 +8,8 @@
 #define BTN_BACK    5
 #define BTN_SLEEP   6
 
-#define WIFI_SSID "CMCC_xx"
-#define WIFI_PASS "manifest"
+#define WIFI_SSID ""
+#define WIFI_PASS ""
 
 enum PageState { PAGE_CLOCK, PAGE_MENU_MAIN, PAGE_MENU_SET, PAGE_SUB_NET, PAGE_SUB_SCR, PAGE_STATUS_DETAIL };
 

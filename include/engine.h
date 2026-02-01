@@ -33,21 +33,26 @@ void forceRefresh() {
 }
 
 void reconnectWiFi() {
-    WiFi.disconnect();
+    WiFi.disconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+    unsigned long startT = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startT < 15000) {
+        u8g2.clearBuffer();
+        drawLoadingCircle(64, 16, 10, (millis() / 2) % 360);
+        u8g2.sendBuffer();
+        delay(20);
+    }
 }
 
 void drawStatusDetail() {
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_wqy12_t_gb2312);
-    u8g2.setCursor(0, 1); u8g2.print("--- 设备状态 ---");
-    u8g2.setCursor(0, 13);
+    u8g2.setCursor(0, 1);
     if (WiFi.status() == WL_CONNECTED) {
         u8g2.printf("IP: %s", WiFi.localIP().toString().c_str());
     } else {
-        u8g2.print("网络: 未连接");
+        u8g2.print("网络未连接");
     }
-    u8g2.setCursor(0, 25);
+    u8g2.setCursor(0, 17);
     u8g2.printf("核心温度: %.1f°C", temperatureRead());
     u8g2.sendBuffer();
 }
@@ -58,14 +63,18 @@ void drawClock() {
     if (WiFi.status() == WL_CONNECTED) {
         struct tm ti;
         if (getLocalTime(&ti, 0)) { 
-            u8g2.setCursor(0, 2); 
-            u8g2.printf("%d月%d日", ti.tm_mon + 1, ti.tm_mday);
-            u8g2.setCursor(0, 18); 
-            u8g2.printf("%02d %02d %02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+            u8g2.setCursor(0, 2);
+            if (ti.tm_hour >= 12) {
+                u8g2.printf("%d月%d日下午", ti.tm_mon + 1, ti.tm_mday);
+            } else {
+                u8g2.printf("%d月%d日上午", ti.tm_mon + 1, ti.tm_mday);
+            } 
+            u8g2.setCursor(0, 18);
+            u8g2.printf("%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
             u8g2.setCursor(95, 2); u8g2.print(weatherText);
             u8g2.setCursor(95, 18); u8g2.print(weatherTemp + "°C"); 
         } else {
-            u8g2.setCursor(5, 8); u8g2.print("同步中");
+            u8g2.setCursor(5, 8); u8g2.print("获取中");
         }
     } else {
         u8g2.setCursor(5, 8); u8g2.print("未连网");

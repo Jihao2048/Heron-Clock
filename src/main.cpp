@@ -23,7 +23,8 @@ bool isButtonPressed(int pin) {
 }
 
 void setup() {
-    u8g2.begin(); u8g2.enableUTF8Print();
+    u8g2.begin();
+    u8g2.enableUTF8Print();
     u8g2.setFontPosTop(); 
     u8g2.setContrast(contrastValues[contrastIdx]);
     int pins[] = {BTN_CONFIRM, BTN_RIGHT, BTN_LEFT, BTN_BACK, BTN_SLEEP};
@@ -39,6 +40,7 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
         configTime(28800, 0, "time.apple.com");
         updateWeather();
+        WiFi.disconnect(true);
     }
     lastOperateTime = millis();
 }
