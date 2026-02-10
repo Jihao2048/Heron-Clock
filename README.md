@@ -42,3 +42,4 @@ Fluid easing animations for seamless navigation between settings and apps.
 
 ---
 > this program Gemini wrote it.
+> 本人不对除正常使用（干燥适宜温度环境下静置，携带使用或充电，烧录官方提供程序）以外，造成伤害或事故承担责任。
