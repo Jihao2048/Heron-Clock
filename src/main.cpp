@@ -1,6 +1,7 @@
 #include "engine.h"
 
-U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE); 
+// 使用ESP32-S3的默认I2C引脚初始化OLED
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE); 
 PageState currentPage = PAGE_CLOCK;
 bool isSleep = false;
 String weatherText = "--", weatherTemp = "--";
@@ -8,7 +9,8 @@ int menuIndex = 0;
 uint8_t contrastValues[] = {10, 80, 160, 255}, contrastIdx = 2, sleepIdx = 2;
 int sleepTimeOptions[] = {30, 60, 0}; 
 unsigned long lastOperateTime = 0, lastAnimTime = 0, lastClockUpdate = 0;
-float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160, scrollX = 0;
+float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160;
+bool needsViewCountRefresh = false;
 
 bool isButtonPressed(int pin) {
     if (digitalRead(pin) == LOW) {
@@ -33,14 +35,12 @@ void setup() {
     unsigned long startT = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startT < 15000) {
         u8g2.clearBuffer();
-        drawLoadingCircle(64, 16, 10, (millis() / 2) % 360);
+        drawLoadingBar();
         u8g2.sendBuffer();
-        delay(20);
     }
     if (WiFi.status() == WL_CONNECTED) {
         configTime(28800, 0, "time.apple.com");
         updateWeather();
-        WiFi.disconnect(true);
     }
     lastOperateTime = millis();
 }
@@ -64,44 +64,61 @@ void loop() {
     if (isButtonPressed(BTN_CONFIRM)) {
         bool needsResetAnim = true;
         if (currentPage == PAGE_CLOCK) { currentPage = PAGE_MENU_MAIN; menuIndex = 0; }
-        else if (currentPage == PAGE_MENU_MAIN) { if (menuIndex == 0) currentPage = PAGE_MENU_SET; }
+        else if (currentPage == PAGE_MENU_MAIN) { 
+            if (menuIndex == 0) currentPage = PAGE_MENU_SET;
+            else if (menuIndex == 1) { 
+                currentPage = PAGE_VIEWCOUNT;
+                needsViewCountRefresh = true;
+            }
+        }
         else if (currentPage == PAGE_MENU_SET) { currentPage = (menuIndex == 0 ? PAGE_SUB_NET : PAGE_SUB_SCR); menuIndex = 0; }
         else if (currentPage == PAGE_SUB_NET) {
             if (menuIndex == 0) { currentPage = PAGE_STATUS_DETAIL; needsResetAnim = false; }
             else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; }
-            else if (menuIndex == 2) { forceRefresh(); needsResetAnim = false; }
         }
         else if (currentPage == PAGE_SUB_SCR) {
             if (menuIndex == 0) { contrastIdx = (contrastIdx + 1) % 4; u8g2.setContrast(contrastValues[contrastIdx]); }
             else { sleepIdx = (sleepIdx + 1) % 3; }
             needsResetAnim = false;
         }
-        if (needsResetAnim) { menuX[0]=160; menuX[1]=202; menuX[2]=244; scrollX = 0; }
+        else if (currentPage == PAGE_VIEWCOUNT) {
+            // 在小白李页面按确定键刷新数据
+            needsViewCountRefresh = true;
+            needsResetAnim = false;
+        }
+        if (needsResetAnim) { menuX[0]=160; menuX[1]=202; menuX[2]=244; }
     }
     if (isButtonPressed(BTN_BACK)) {
         if (currentPage == PAGE_MENU_MAIN) currentPage = PAGE_CLOCK;
+        else if (currentPage == PAGE_VIEWCOUNT) currentPage = PAGE_MENU_MAIN;
         else {
             if (currentPage >= PAGE_SUB_NET) currentPage = PAGE_MENU_SET;
             else if (currentPage == PAGE_MENU_SET) currentPage = PAGE_MENU_MAIN;
-            menuX[0] = -40; menuX[1] = -82; menuX[2] = -124; scrollX = 0;
+            menuX[0] = -40; menuX[1] = -82; menuX[2] = -124;
         }
         menuIndex = 0;
     }
-    int maxIdx = (currentPage == PAGE_SUB_NET) ? 2 : 1; 
+    int maxIdx = (currentPage == PAGE_SUB_NET) ? 1 : (currentPage == PAGE_MENU_MAIN) ? 1 : 1; 
     if (isButtonPressed(BTN_RIGHT)) menuIndex = (menuIndex + 1) % (maxIdx + 1);
     if (isButtonPressed(BTN_LEFT))  menuIndex = (menuIndex - 1 + (maxIdx + 1)) % (maxIdx + 1);
     unsigned long now = millis();
-    if (now - lastAnimTime >= 16) { 
-        lastAnimTime = now;
-        updateAnimation();
-        if (currentPage == PAGE_CLOCK) {
-            if (menuX[0] < 140 && menuX[0] > -30) drawCommonMenu(0, 0); 
-            else if (now - lastClockUpdate >= 500) { lastClockUpdate = now; drawClock(); }
-        } else {
-            if (currentPage == PAGE_MENU_MAIN) drawCommonMenu(129, 171);
-            else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222); 
-            else if (currentPage == PAGE_SUB_NET) drawCommonMenu(238, 84, 243);
-            else if (currentPage == PAGE_SUB_SCR) drawCommonMenu(137, 123); 
+    lastAnimTime = now;
+    updateAnimation();
+    if (currentPage == PAGE_CLOCK) {
+        if (menuX[0] < 140 && menuX[0] > -30) drawCommonMenu(0, 0); 
+        else if (now - lastClockUpdate >= 500) { lastClockUpdate = now; drawClock(); }
+    } else {
+        if (currentPage == PAGE_MENU_MAIN) drawCommonMenu(129, 171);
+        else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222); 
+        else if (currentPage == PAGE_SUB_NET) drawCommonMenu(238, 84);
+        else if (currentPage == PAGE_SUB_SCR) drawCommonMenu(137, 123);
+        else if (currentPage == PAGE_VIEWCOUNT) {
+            if (needsViewCountRefresh) {
+                updateView();
+                needsViewCountRefresh = false;
+            }
+            drawViewCountPage(); 
         }
     }
+    delay(3);
 }

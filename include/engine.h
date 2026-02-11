@@ -4,11 +4,30 @@
 #include <ArduinoJson.h>
 #include "conf.h"
 
-void drawLoadingCircle(int x, int y, int r, int angle) {
-    for (int i = 0; i < 280; i += 15) {
-        float rad = (angle + i) * 0.01745329;
-        u8g2.drawPixel(x + cos(rad) * r, y + sin(rad) * r);
-    }
+void drawLoadingBar() {
+    const int screenW = 128;
+    const int screenH = 32;
+    const int animTime = 1200;  
+    const int pauseTime = 500; 
+    
+    long ms = millis() % (animTime + pauseTime);
+
+    if (ms < animTime) {
+        float t = (float)ms / (animTime / 2.0); 
+        
+        if (t < 1.0) {
+            // 第一阶段：铺满
+            // 2. 把 pow(x, 3) 改成 pow(x, 2)，减弱加速感，减少撕裂
+            float easeOut = 1.0 - pow(1.0 - t, 2);
+            u8g2.drawBox(0, 0, (int)(screenW * easeOut), screenH);
+        } else {
+            // 第二阶段：缩回
+            float t2 = t - 1.0;
+            float easeOut = 1.0 - pow(1.0 - t2, 2);
+            int startX = (int)(screenW * easeOut);
+            u8g2.drawBox(startX, 0, screenW - startX, screenH);
+        }
+    } 
 }
 
 void updateWeather() {
@@ -25,22 +44,68 @@ void updateWeather() {
     http.end();
 }
 
-void forceRefresh() {
-    if (WiFi.status() == WL_CONNECTED) {
-        configTime(28800, 0, "time.apple.com");
-        updateWeather();
+// 获取标题视频播放量和标题
+String ViewCount = "--";
+String Title = "标题";
+void updateView() {
+    if (WiFi.status() != WL_CONNECTED) {
+        ViewCount = "未连网";
+        return;
     }
+    
+    HTTPClient http;
+    http.setTimeout(5000);
+    http.begin("https://api.bilibili.com/x/web-interface/view?bvid=BV1LxF4znEwU");
+    
+    if (http.GET() == 200) {
+        JsonDocument doc;
+        deserializeJson(doc, http.getString());
+        
+        if (doc["code"].as<int>() == 0) {
+            // 获取标题
+            const char* title = doc["data"]["title"];
+            if (title) {
+                Title = String(title);
+            } else {
+                Title = "标题";
+            }
+            
+            // 获取播放量
+            int view = doc["data"]["stat"]["view"].as<int>();
+            ViewCount = String(view);
+        } else {
+            ViewCount = "获取失败";
+            Title = "标题";
+        }
+    } else {
+        ViewCount = "网络错误";
+        Title = "标题";
+    }
+    http.end();
 }
 
+void drawViewCountPage() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2.setCursor(0, 2);
+    u8g2.print(Title);
+    u8g2.setCursor(0, 18);
+    u8g2.print(ViewCount);
+    u8g2.sendBuffer();
+    }
+    
 void reconnectWiFi() {
-    WiFi.disconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     unsigned long startT = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startT < 15000) {
         u8g2.clearBuffer();
-        drawLoadingCircle(64, 16, 10, (millis() / 2) % 360);
+        drawLoadingBar();
         u8g2.sendBuffer();
-        delay(20);
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+        configTime(28800, 0, "time.apple.com");
+        updateWeather();
+        delay(1000);
     }
 }
 
@@ -53,7 +118,12 @@ void drawStatusDetail() {
         u8g2.print("网络未连接");
     }
     u8g2.setCursor(0, 17);
-    u8g2.printf("核心温度: %.1f°C", temperatureRead());
+    float currentTemp = temperatureRead();
+    if (currentTemp > 50.0) {
+        u8g2.print("发烧了！要去了喵！");
+    } else {
+        u8g2.printf("核心温度: %.1f°C", currentTemp);
+    }
     u8g2.sendBuffer();
 }
 
@@ -85,12 +155,11 @@ void drawClock() {
 void drawCommonMenu(uint16_t ic1, uint16_t ic2, uint16_t ic3 = 0) {
     u8g2.clearBuffer();
     const char* dynamicTitle = "夜鹭";
-    if (currentPage == PAGE_MENU_MAIN) dynamicTitle = (menuIndex == 0 ? "设置" : "文件");
+    if (currentPage == PAGE_MENU_MAIN) dynamicTitle = (menuIndex == 0 ? "设置" : "小白李");
     else if (currentPage == PAGE_MENU_SET)  dynamicTitle = (menuIndex == 0 ? "网络" : "屏幕");
     else if (currentPage == PAGE_SUB_NET) {
         if (menuIndex == 0) dynamicTitle = "状态";
         else if (menuIndex == 1) dynamicTitle = "连接";
-        else dynamicTitle = "刷新";
     }
     else if (currentPage == PAGE_SUB_SCR) dynamicTitle = (menuIndex == 0 ? "亮度" : "息屏");
     u8g2.setFont(u8g2_font_open_iconic_all_2x_t);
@@ -113,21 +182,10 @@ void drawCommonMenu(uint16_t ic1, uint16_t ic2, uint16_t ic3 = 0) {
 void updateAnimation() {
     float easing = 0.28; 
     if (currentPage != PAGE_CLOCK && currentPage != PAGE_STATUS_DETAIL) {
-        if (currentPage == PAGE_SUB_NET) {
-            float targetScrollX = menuIndex * 42;
-            scrollX += (targetScrollX - scrollX) * easing;
-            for (int i = 0; i < 3; i++) {
-                targetX[i] = 65 + (i * 42) - scrollX;
-                menuX[i] += (targetX[i] - menuX[i]) * easing;
-            }
-            frameX += (65 - frameX) * easing;
-        } else {
-            scrollX = 0;
-            targetX[0] = 65; targetX[1] = 107; targetX[2] = 149;
-            for (int i = 0; i < 3; i++) menuX[i] += (targetX[i] - menuX[i]) * easing;
-            float targetFrameX = menuIndex * 42 + 65;
-            frameX += (targetFrameX - frameX) * easing;
-        }
+        targetX[0] = 60; targetX[1] = 100; targetX[2] = 140;
+        for (int i = 0; i < 3; i++) menuX[i] += (targetX[i] - menuX[i]) * easing;
+        float targetFrameX = menuIndex * 40 + 60;
+        frameX += (targetFrameX - frameX) * easing;
     } else {
         for (int i = 0; i < 3; i++) menuX[i] += (160 - menuX[i]) * easing;
         frameX += (160 - frameX) * easing;
