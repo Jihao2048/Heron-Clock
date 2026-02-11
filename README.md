@@ -3,7 +3,7 @@
 
 An elegant, smooth-animation ESP32-C3 desk clock featuring real-time weather, NTP time synchronization, and a custom UI engine.
 
-![Platform](https://img.shields.io/badge/Platform-ESP32--C3-orange?logo=Esperssif)
+![Platform](https://img.shields.io/badge/Platform-ESP32--C3-orange?logo=espressif)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Framework](https://img.shields.io/badge/Framework-Arduino-pro?logo=Arduino)
 
