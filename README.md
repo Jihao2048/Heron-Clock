@@ -42,6 +42,6 @@ Fluid easing animations for seamless navigation between settings and apps.
 ---
 > this program Gemini wrote it.
 
-> 哔哩哔哩账号!(https://space.bilibili.com/2121656213)附带演示和使用说明。
+> ![哔哩哔哩账号](https://space.bilibili.com/2121656213) 附带演示和使用说明。
 
 > 在干燥适宜温度环境下使用，仅进行正常操作（静置、携带、充电、烧录官方程序）。对于非正常使用造成的任何损害，本人(即项目作者)不承担责任。
