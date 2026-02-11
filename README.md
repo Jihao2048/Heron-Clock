@@ -1,5 +1,4 @@
-# 🛰️ Heron Clock (夜鹭时钟)
-![Logo](logo.png)
+# 🛰️ Heron Clock
 
 An elegant, smooth-animation ESP32-C3 desk clock featuring real-time weather, NTP time synchronization, and a custom UI engine.
 
