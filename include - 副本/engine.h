@@ -7,9 +7,11 @@
 void drawLoadingBar() {
     const int screenW = 128;
     const int screenH = 32;
-    const int animTime = 800;  
+    const int animTime = 1200;  
     const int pauseTime = 500; 
+    
     long ms = millis() % (animTime + pauseTime);
+
     if (ms < animTime) {
         float t = (float)ms / (animTime / 2.0);    
         if (t < 1.0) {
@@ -43,12 +45,15 @@ void updateView() {
         ViewCount = "未连网";
         return;
     }
+    
     HTTPClient http;
     http.setTimeout(5000);
     http.begin("https://api.bilibili.com/x/web-interface/view?bvid=BV1LxF4znEwU");
+    
     if (http.GET() == 200) {
         JsonDocument doc;
         deserializeJson(doc, http.getString());
+        
         if (doc["code"].as<int>() == 0) {
             // 获取标题
             const char* title = doc["data"]["title"];
@@ -57,6 +62,8 @@ void updateView() {
             } else {
                 Title = "标题";
             }
+            
+            // 获取播放量
             int view = doc["data"]["stat"]["view"].as<int>();
             ViewCount = String(view);
         } else {
@@ -113,14 +120,12 @@ void drawStatusDetail() {
     u8g2.sendBuffer();
 }
 
-void drawClock(bool isInitialDisplay) {
+void drawClockAfterInit() {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_wqy16_t_gb2312);
-    bool isConnected = isInitialDisplay ? (WiFi.status() == WL_CONNECTED) : connectedDuringInit;
-    if (isConnected) {
+    if (connectedDuringInit == true) {
         struct tm ti;
         if (getLocalTime(&ti, 0)) { 
-            // 显示日期
             u8g2.setCursor(0, 2);
             if (ti.tm_hour >= 12) {
                 u8g2.printf("%d月%d日下午", ti.tm_mon + 1, ti.tm_mday);
@@ -129,17 +134,38 @@ void drawClock(bool isInitialDisplay) {
             } 
             u8g2.setCursor(0, 18);
             u8g2.printf("%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
-            u8g2.setCursor(95, 2); 
-            u8g2.print(weatherText);
-            u8g2.setCursor(95, 18); 
-            u8g2.print(weatherTemp + "°C"); 
+            u8g2.setCursor(95, 2); u8g2.print(weatherText);
+            u8g2.setCursor(95, 18); u8g2.print(weatherTemp + "°C"); 
         } else {
-            u8g2.setCursor(5, 8); 
-            u8g2.print("获取中");
+            u8g2.setCursor(5, 8); u8g2.print("获取中");
         }
     } else {
-        u8g2.setCursor(5, 8); 
-        u8g2.print("未连网");
+        u8g2.setCursor(5, 8); u8g2.print("未连网");
+    }
+    u8g2.sendBuffer();
+}
+
+void drawClockAtInit() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    if (WiFi.status() == WL_CONNECTED) {
+        struct tm ti;
+        if (getLocalTime(&ti, 0)) { 
+            u8g2.setCursor(0, 2);
+            if (ti.tm_hour >= 12) {
+                u8g2.printf("%d月%d日下午", ti.tm_mon + 1, ti.tm_mday);
+            } else {
+                u8g2.printf("%d月%d日上午", ti.tm_mon + 1, ti.tm_mday);
+            } 
+            u8g2.setCursor(0, 18);
+            u8g2.printf("%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+            u8g2.setCursor(95, 2); u8g2.print(weatherText);
+            u8g2.setCursor(95, 18); u8g2.print(weatherTemp + "°C"); 
+        } else {
+            u8g2.setCursor(5, 8); u8g2.print("获取中");
+        }
+    } else {
+        u8g2.setCursor(5, 8); u8g2.print("未连网");
     }
     u8g2.sendBuffer();
 }

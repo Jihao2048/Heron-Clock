@@ -58,13 +58,9 @@ void setup() {
 void loop() {
     if (sleepTimeOptions[sleepIdx] != 0 && !isSleep) {
         if (millis() - lastOperateTime > (unsigned long)sleepTimeOptions[sleepIdx] * 1000) {
-            unsigned long animStart = millis();
-            while (millis() - animStart < 450) {
-                u8g2.clearBuffer();
-                drawLoadingBar();
-                u8g2.sendBuffer();
-            }
             isSleep = true; 
+            drawLoadingBar();
+            u8g2.sendBuffer();
             u8g2.setPowerSave(1);
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
@@ -73,14 +69,8 @@ void loop() {
     if (isButtonPressed(BTN_SLEEP)) { 
         bool wasSleeping = isSleep;
         isSleep = !isSleep; 
-        if (!wasSleeping && isSleep) { 
-            unsigned long animStart = millis();
-            while (millis() - animStart < 450) {
-                u8g2.clearBuffer();
-                drawLoadingBar();
-                u8g2.sendBuffer();
-            }
-        }
+        drawLoadingBar();
+        u8g2.sendBuffer();
         u8g2.setPowerSave(isSleep);
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
@@ -143,10 +133,10 @@ void loop() {
         else if (now - lastClockUpdate >= 500) { 
             lastClockUpdate = now; 
             if (isFirstClockDisplay) {
-                drawClock(true);
+                drawClockAtInit();
                 isFirstClockDisplay = false;
             } else {
-                drawClock(false);
+                drawClockAfterInit();
             }
         }
     } else {
