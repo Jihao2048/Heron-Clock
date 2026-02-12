@@ -6,11 +6,13 @@ PageState currentPage = PAGE_CLOCK;
 bool isSleep = false;
 String weatherText = "--", weatherTemp = "--";
 int menuIndex = 0;
-uint8_t contrastValues[] = {10, 80, 160, 255}, contrastIdx = 2, sleepIdx = 2;
+uint8_t contrastValues[] = {10, 80, 160, 255}, contrastIdx = 2, sleepIdx = 0;
 int sleepTimeOptions[] = {30, 60, 0}; 
 unsigned long lastOperateTime = 0, lastAnimTime = 0, lastClockUpdate = 0;
 float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160;
 bool needsViewCountRefresh = false;
+bool isFirstClockDisplay = true;
+bool connectedDuringInit = false;
 
 bool isButtonPressed(int pin) {
     if (digitalRead(pin) == LOW) {
@@ -40,7 +42,13 @@ void setup() {
     }
     if (WiFi.status() == WL_CONNECTED) {
         configTime(28800, 0, "time.apple.com");
+        unsigned long timeSyncStart = millis();
+        struct tm timeinfo;
+        while (!getLocalTime(&timeinfo, 100) && (millis() - timeSyncStart < 2000)) {
+            delay(100);
+        }
         updateWeather();
+        connectedDuringInit = true;
     }
     lastOperateTime = millis();
 }
@@ -48,10 +56,22 @@ void setup() {
 void loop() {
     if (sleepTimeOptions[sleepIdx] != 0 && !isSleep) {
         if (millis() - lastOperateTime > (unsigned long)sleepTimeOptions[sleepIdx] * 1000) {
-            isSleep = true; u8g2.setPowerSave(1);
+            isSleep = true; 
+            u8g2.setPowerSave(1);
+            // 息屏时关闭WiFi并休眠WiFi模块
+            if (WiFi.status() == WL_CONNECTED) {
+                WiFi.disconnect(true);
+                WiFi.mode(WIFI_OFF);
+            }
         }
     }
-    if (isButtonPressed(BTN_SLEEP)) { isSleep = !isSleep; u8g2.setPowerSave(isSleep); }
+    if (isButtonPressed(BTN_SLEEP)) { 
+        bool wasSleeping = isSleep;
+        isSleep = !isSleep; 
+        u8g2.setPowerSave(isSleep);
+        if (wasSleeping && !isSleep) {
+        }
+    }
     if (isSleep) return;
     if (currentPage == PAGE_STATUS_DETAIL) {
         if (isButtonPressed(BTN_CONFIRM) || isButtonPressed(BTN_BACK) || isButtonPressed(BTN_LEFT) || isButtonPressed(BTN_RIGHT)) {
@@ -106,7 +126,15 @@ void loop() {
     updateAnimation();
     if (currentPage == PAGE_CLOCK) {
         if (menuX[0] < 140 && menuX[0] > -30) drawCommonMenu(0, 0); 
-        else if (now - lastClockUpdate >= 500) { lastClockUpdate = now; drawClock(); }
+        else if (now - lastClockUpdate >= 500) { 
+            lastClockUpdate = now; 
+            if (isFirstClockDisplay) {
+                drawClockAtInit();
+                isFirstClockDisplay = false;
+            } else {
+                drawClockAfterInit();
+            }
+        }
     } else {
         if (currentPage == PAGE_MENU_MAIN) drawCommonMenu(129, 171);
         else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222); 

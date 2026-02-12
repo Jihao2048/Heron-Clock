@@ -13,15 +13,11 @@ void drawLoadingBar() {
     long ms = millis() % (animTime + pauseTime);
 
     if (ms < animTime) {
-        float t = (float)ms / (animTime / 2.0); 
-        
+        float t = (float)ms / (animTime / 2.0);    
         if (t < 1.0) {
-            // 第一阶段：铺满
-            // 2. 把 pow(x, 3) 改成 pow(x, 2)，减弱加速感，减少撕裂
             float easeOut = 1.0 - pow(1.0 - t, 2);
             u8g2.drawBox(0, 0, (int)(screenW * easeOut), screenH);
         } else {
-            // 第二阶段：缩回
             float t2 = t - 1.0;
             float easeOut = 1.0 - pow(1.0 - t2, 2);
             int startX = (int)(screenW * easeOut);
@@ -44,9 +40,6 @@ void updateWeather() {
     http.end();
 }
 
-// 获取标题视频播放量和标题
-String ViewCount = "--";
-String Title = "标题";
 void updateView() {
     if (WiFi.status() != WL_CONNECTED) {
         ViewCount = "未连网";
@@ -127,7 +120,32 @@ void drawStatusDetail() {
     u8g2.sendBuffer();
 }
 
-void drawClock() {
+void drawClockAfterInit() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    if (connectedDuringInit == true) {
+        struct tm ti;
+        if (getLocalTime(&ti, 0)) { 
+            u8g2.setCursor(0, 2);
+            if (ti.tm_hour >= 12) {
+                u8g2.printf("%d月%d日下午", ti.tm_mon + 1, ti.tm_mday);
+            } else {
+                u8g2.printf("%d月%d日上午", ti.tm_mon + 1, ti.tm_mday);
+            } 
+            u8g2.setCursor(0, 18);
+            u8g2.printf("%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+            u8g2.setCursor(95, 2); u8g2.print(weatherText);
+            u8g2.setCursor(95, 18); u8g2.print(weatherTemp + "°C"); 
+        } else {
+            u8g2.setCursor(5, 8); u8g2.print("获取中");
+        }
+    } else {
+        u8g2.setCursor(5, 8); u8g2.print("未连网");
+    }
+    u8g2.sendBuffer();
+}
+
+void drawClockAtInit() {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_wqy16_t_gb2312);
     if (WiFi.status() == WL_CONNECTED) {
