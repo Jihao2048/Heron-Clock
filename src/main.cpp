@@ -109,7 +109,7 @@ void loop() {
         else if (currentPage == PAGE_MENU_SET) { currentPage = (menuIndex == 0 ? PAGE_SUB_NET : PAGE_SUB_SCR); menuIndex = 0; }
         else if (currentPage == PAGE_SUB_NET) {
             if (menuIndex == 0) { currentPage = PAGE_STATUS_DETAIL; needsResetAnim = false; }
-            else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; }
+            else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; connectedDuringInit = true;}
         }
         else if (currentPage == PAGE_SUB_SCR) {
             if (menuIndex == 0) { contrastIdx = (contrastIdx + 1) % 4; u8g2.setContrast(contrastValues[contrastIdx]); }
