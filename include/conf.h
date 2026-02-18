@@ -25,3 +25,6 @@ extern unsigned long lastOperateTime, lastAnimTime, lastClockUpdate;
 extern float menuX[3], targetX[3], frameX, scrollX;
 extern bool needsViewCountRefresh;
 extern bool connectedDuringInit;
+extern int currentAppIndex;
+extern float appScrollX, targetAppScrollX;
+extern bool isAppScrolling;
