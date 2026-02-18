@@ -8,8 +8,8 @@
 #define BTN_BACK    6
 #define BTN_SLEEP   10
 
-#define WIFI_SSID "CU_wzUj"
-#define WIFI_PASS "ycmfgnxa"
+#define WIFI_SSID ""
+#define WIFI_PASS ""
 
 enum PageState { PAGE_CLOCK, PAGE_MENU_MAIN, PAGE_MENU_SET, PAGE_SUB_NET, PAGE_SUB_SCR, PAGE_STATUS_DETAIL, PAGE_APPS };
 String ViewCount = "--";
@@ -25,7 +25,3 @@ extern unsigned long lastOperateTime, lastAnimTime, lastClockUpdate;
 extern float menuX[3], targetX[3], frameX, scrollX;
 extern bool needsViewCountRefresh;
 extern bool connectedDuringInit;
-
-extern int currentAppIndex;
-extern float appScrollX, targetAppScrollX;
-extern bool isAppScrolling;
