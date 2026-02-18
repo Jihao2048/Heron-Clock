@@ -3,6 +3,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "conf.h"
+#include "applist.h"
 
 void drawLoadingBar() {
     const int screenW = 128;
@@ -79,6 +80,83 @@ void drawViewCountPage() {
     u8g2.print(ViewCount);
     u8g2.sendBuffer();
     }
+
+enum ScrollDirection { SCROLL_NONE, SCROLL_LEFT, SCROLL_RIGHT };
+
+float appScrollX = 0;  // 应用滚动位置
+float targetAppScrollX = 0;  // 目标滚动位置
+ScrollDirection scrollDirection = SCROLL_NONE;  // 滚动方向
+bool isAppScrolling = false;  // 是否正在滚动
+int targetAppIndex = 0;       // 目标应用索引（动画完成后才应用）
+
+void drawAppsPage() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    
+    // 平滑滚动动画
+    float easing = 0.3;  // 加快动画速度
+    float prevScrollX = appScrollX;
+    appScrollX += (targetAppScrollX - appScrollX) * easing;
+    
+    // 检测滚动是否完成
+    if (isAppScrolling) {
+        // 检查是否接近目标位置
+        if (abs(appScrollX - targetAppScrollX) < 0.5) {
+            appScrollX = targetAppScrollX;
+            
+            // 检查是否完成整个屏幕的滚动
+            if (abs(appScrollX) >= 128) {
+                // 滚动完成，重置到中心位置并应用目标应用索引
+                appScrollX = 0;
+                targetAppScrollX = 0;
+                currentAppIndex = targetAppIndex;  // 动画完成后才更新当前应用索引
+                scrollDirection = SCROLL_NONE;
+            }
+            // 只有在没有新的滚动目标时才停止动画
+            if (abs(targetAppScrollX) < 0.1) {
+                isAppScrolling = false;
+            }
+        }
+    }
+    
+    // 绘制应用（实现滚动效果）
+    int baseX = (int)appScrollX;
+    int y = 8;
+    
+    // 根据滚动方向绘制不同的应用组合
+    if (scrollDirection == SCROLL_LEFT) {
+        // 向左滚动：显示当前应用和下一个应用
+        u8g2.setCursor(baseX + 5, y);
+        u8g2.print(appsList[currentAppIndex]);
+        
+        int nextIndex = (currentAppIndex + 1) % maxApps;
+        u8g2.setCursor(baseX + 128 + 5, y);
+        u8g2.print(appsList[nextIndex]);
+    } else if (scrollDirection == SCROLL_RIGHT) {
+        // 向右滚动：显示当前应用和前一个应用
+        u8g2.setCursor(baseX + 5, y);
+        u8g2.print(appsList[currentAppIndex]);
+        
+        int prevIndex = (currentAppIndex - 1 + maxApps) % maxApps;
+        u8g2.setCursor(baseX - 128 + 5, y);
+        u8g2.print(appsList[prevIndex]);
+    } else {
+        // 无滚动：只显示当前应用
+        u8g2.setCursor(5, y);
+        u8g2.print(appsList[currentAppIndex]);
+    }
+    
+    // 显示左右箭头指示器
+    u8g2.setFont(u8g2_font_5x7_tf);
+    if (maxApps > 1) {
+        u8g2.setCursor(0, 30);
+        u8g2.print("<");
+        u8g2.setCursor(120, 30);
+        u8g2.print(">");
+    }
+    
+    u8g2.sendBuffer();
+    }
     
 void reconnectWiFi() {
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -147,7 +225,7 @@ void drawClock(bool isInitialDisplay) {
 void drawCommonMenu(uint16_t ic1, uint16_t ic2, uint16_t ic3 = 0) {
     u8g2.clearBuffer();
     const char* dynamicTitle = "夜鹭";
-    if (currentPage == PAGE_MENU_MAIN) dynamicTitle = (menuIndex == 0 ? "设置" : "小白李");
+    if (currentPage == PAGE_MENU_MAIN) dynamicTitle = (menuIndex == 0 ? "设置" : "应用");
     else if (currentPage == PAGE_MENU_SET)  dynamicTitle = (menuIndex == 0 ? "网络" : "屏幕");
     else if (currentPage == PAGE_SUB_NET) {
         if (menuIndex == 0) dynamicTitle = "状态";
@@ -181,5 +259,15 @@ void updateAnimation() {
     } else {
         for (int i = 0; i < 3; i++) menuX[i] += (160 - menuX[i]) * easing;
         frameX += (160 - frameX) * easing;
+    }
+    
+    // 重置应用滚动位置（当不在APPS页面时完全重置）
+    if (currentPage != PAGE_APPS) {
+        targetAppScrollX = 0;
+        appScrollX = 0;
+        isAppScrolling = false;
+    } else if (!isAppScrolling && abs(appScrollX) > 1.0) {
+        // 逐渐回到中心位置
+        targetAppScrollX = 0;
     }
 }

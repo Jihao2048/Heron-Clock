@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "applist.h"
 
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE); 
 PageState currentPage = PAGE_CLOCK;
@@ -12,6 +13,11 @@ float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160;
 bool needsViewCountRefresh = false;
 bool isFirstClockDisplay = true;
 bool connectedDuringInit = false;
+int currentAppIndex = 0;
+
+// 应用列表定义
+const char* appsList[] = {"计算器", "中国农历", "播放量"};
+const int maxApps = sizeof(appsList) / sizeof(appsList[0]);
 
 bool isButtonPressed(int pin) {
     if (digitalRead(pin) == LOW) {
@@ -102,7 +108,7 @@ void loop() {
         else if (currentPage == PAGE_MENU_MAIN) { 
             if (menuIndex == 0) currentPage = PAGE_MENU_SET;
             else if (menuIndex == 1) { 
-                currentPage = PAGE_VIEWCOUNT;
+                currentPage = PAGE_APPS;
                 needsViewCountRefresh = true;
             }
         }
@@ -116,7 +122,7 @@ void loop() {
             else { sleepIdx = (sleepIdx + 1) % 3; }
             needsResetAnim = false;
         }
-        else if (currentPage == PAGE_VIEWCOUNT) {
+        else if (currentPage == PAGE_APPS) {
             needsViewCountRefresh = true;
             needsResetAnim = false;
         }
@@ -124,7 +130,7 @@ void loop() {
     }
     if (isButtonPressed(BTN_BACK)) {
         if (currentPage == PAGE_MENU_MAIN) currentPage = PAGE_CLOCK;
-        else if (currentPage == PAGE_VIEWCOUNT) currentPage = PAGE_MENU_MAIN;
+        else if (currentPage == PAGE_APPS) currentPage = PAGE_MENU_MAIN;
         else {
             if (currentPage >= PAGE_SUB_NET) currentPage = PAGE_MENU_SET;
             else if (currentPage == PAGE_MENU_SET) currentPage = PAGE_MENU_MAIN;
@@ -133,8 +139,30 @@ void loop() {
         menuIndex = 0;
     }
     int maxIdx = (currentPage == PAGE_SUB_NET) ? 1 : (currentPage == PAGE_MENU_MAIN) ? 1 : 1; 
-    if (isButtonPressed(BTN_RIGHT)) menuIndex = (menuIndex + 1) % (maxIdx + 1);
-    if (isButtonPressed(BTN_LEFT))  menuIndex = (menuIndex - 1 + (maxIdx + 1)) % (maxIdx + 1);
+    if (isButtonPressed(BTN_RIGHT)) {
+        if (currentPage == PAGE_APPS) {
+            // 允许在动画播放过程中立即切换
+            targetAppIndex = (currentAppIndex + 1) % maxApps;
+            targetAppScrollX = -128;  // 向左滚动
+            scrollDirection = SCROLL_LEFT;
+            isAppScrolling = true;
+            needsViewCountRefresh = true;
+        } else {
+            menuIndex = (menuIndex + 1) % (maxIdx + 1);
+        }
+    }
+    if (isButtonPressed(BTN_LEFT)) {
+        if (currentPage == PAGE_APPS) {
+            // 允许在动画播放过程中立即切换
+            targetAppIndex = (currentAppIndex - 1 + maxApps) % maxApps;
+            targetAppScrollX = 128;   // 向右滚动
+            scrollDirection = SCROLL_RIGHT;
+            isAppScrolling = true;
+            needsViewCountRefresh = true;
+        } else {
+            menuIndex = (menuIndex - 1 + (maxIdx + 1)) % (maxIdx + 1);
+        }
+    }
     unsigned long now = millis();
     lastAnimTime = now;
     updateAnimation();
@@ -154,13 +182,9 @@ void loop() {
         else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222); 
         else if (currentPage == PAGE_SUB_NET) drawCommonMenu(238, 84);
         else if (currentPage == PAGE_SUB_SCR) drawCommonMenu(137, 123);
-        else if (currentPage == PAGE_VIEWCOUNT) {
-            if (needsViewCountRefresh) {
-                updateView();
-                needsViewCountRefresh = false;
-            }
-            drawViewCountPage(); 
+        else if (currentPage == PAGE_APPS) {
+            drawAppsPage(); 
         }
     }
-    delay(3);
+    delay(5);
 }
