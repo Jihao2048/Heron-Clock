@@ -12,8 +12,6 @@
 #define WIFI_PASS ""
 
 enum PageState { PAGE_CLOCK, PAGE_MENU_MAIN, PAGE_MENU_SET, PAGE_SUB_NET, PAGE_SUB_SCR, PAGE_STATUS_DETAIL, PAGE_APPS };
-String ViewCount = "--";
-String Title = "标题";
 extern U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2;
 extern PageState currentPage;
 extern bool isSleep;
@@ -28,3 +26,5 @@ extern bool connectedDuringInit;
 extern int currentAppIndex;
 extern float appScrollX, targetAppScrollX;
 extern bool isAppScrolling;
+String ViewCount = "--";
+String Title = "标题";
