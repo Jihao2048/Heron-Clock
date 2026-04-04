@@ -2,8 +2,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <esp_sleep.h>
 #include "conf.h"
-#include "applist.h"
 
 void drawLoadingBar() {
     const int screenW = 128;
@@ -39,6 +39,34 @@ void updateWeather() {
     http.end();
 }
 
+void updateLunar() {
+    if (WiFi.status() != WL_CONNECTED) {
+        lunarData = "网络未连接";
+        return;
+    }
+    HTTPClient http;
+    http.setTimeout(3000);
+    http.begin("http://v2.alapi.cn/api/lunar?token=LwExDtUWhF3rH5ib");
+    int httpCode = http.GET();
+    if (httpCode == 200) {
+        JsonDocument doc; 
+        deserializeJson(doc, http.getString());
+        if(doc["code"].as<int>() == 200) {
+            String month = doc["data"]["lunar_month_chinese"].as<String>();
+            String day = doc["data"]["lunar_day_chinese"].as<String>();
+            String festival = doc["data"]["festival"].as<String>();
+            String luck = doc["data"]["xiu_luck"].as<String>();
+            lunarData = month + day + "  " + luck;
+            festival = festival;
+        } else {
+            lunarData = "API错误";
+        }
+    } else {
+        lunarData = "请求失败";
+    }
+    http.end();
+}
+
 void updateView() {
     if (WiFi.status() != WL_CONNECTED) {
         ViewCount = "未连网";
@@ -46,7 +74,7 @@ void updateView() {
     }
     HTTPClient http;
     http.setTimeout(5000);
-    http.begin("https://api.bilibili.com/x/web-interface/view?bvid=BV1LxF4znEwU");
+    http.begin("https://api.bilibili.com/x/web-interface/view?bvid=" + bvid);
     if (http.GET() == 200) {
         JsonDocument doc;
         deserializeJson(doc, http.getString());
@@ -71,23 +99,16 @@ void updateView() {
     http.end();
 }
 
-void drawViewCountPage() {
+void drawView() {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_wqy16_t_gb2312);
-    u8g2.setCursor(0, 2);
+    u8g2.setCursor(0, 0 + pixeloffset);
     u8g2.print(Title);
-    u8g2.setCursor(0, 18);
+    u8g2.setCursor(0, 16 + pixeloffset);
     u8g2.print(ViewCount);
     u8g2.sendBuffer();
     }
 
-enum ScrollDirection { SCROLL_NONE, SCROLL_LEFT, SCROLL_RIGHT };
-
-float appScrollX = 0;  // 应用滚动位置
-float targetAppScrollX = 0;  // 目标滚动位置
-ScrollDirection scrollDirection = SCROLL_NONE;  // 滚动方向
-bool isAppScrolling = false;  // 是否正在滚动
-int targetAppIndex = 0;       // 目标应用索引（动画完成后才应用）
 
 void drawAppsPage() {
     u8g2.clearBuffer();
@@ -149,9 +170,9 @@ void drawAppsPage() {
     // 显示左右箭头指示器
     u8g2.setFont(u8g2_font_5x7_tf);
     if (maxApps > 1) {
-        u8g2.setCursor(0, 30);
+        u8g2.setCursor(0, 10);
         u8g2.print("<");
-        u8g2.setCursor(120, 30);
+        u8g2.setCursor(122, 10);
         u8g2.print(">");
     }
     
@@ -169,13 +190,15 @@ void reconnectWiFi() {
     if (WiFi.status() == WL_CONNECTED) {
         configTime(28800, 0, "time.apple.com");
         updateWeather();
+        updateLunar();
+        updateView();
         delay(1000);
     }
 }
 
 void drawStatusDetail() {
     u8g2.clearBuffer();
-    u8g2.setCursor(0, 1);
+    u8g2.setCursor(0, 0 + pixeloffset);
     if (WiFi.status() == WL_CONNECTED) {
         u8g2.printf("IP: %s", WiFi.localIP().toString().c_str());
     } else {
@@ -183,8 +206,8 @@ void drawStatusDetail() {
     }
     u8g2.setCursor(0, 17);
     float currentTemp = temperatureRead();
-    if (currentTemp > 50.0) {
-        u8g2.print("发烧了喵！");
+    if (currentTemp > 40.0) {
+        esp_restart();
     } else {
         u8g2.printf("核心温度: %.1f°C", currentTemp);
     }
@@ -199,24 +222,24 @@ void drawClock(bool isInitialDisplay) {
         struct tm ti;
         if (getLocalTime(&ti, 0)) { 
             // 显示日期
-            u8g2.setCursor(0, 2);
+            u8g2.setCursor(0, 0 + pixeloffset);
             if (ti.tm_hour >= 12) {
                 u8g2.printf("%d月%d日下午", ti.tm_mon + 1, ti.tm_mday);
             } else {
                 u8g2.printf("%d月%d日上午", ti.tm_mon + 1, ti.tm_mday);
             } 
-            u8g2.setCursor(0, 18);
+            u8g2.setCursor(0, 16 + pixeloffset);
             u8g2.printf("%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
-            u8g2.setCursor(95, 2); 
+            u8g2.setCursor(95, 0 + pixeloffset); 
             u8g2.print(weatherText);
-            u8g2.setCursor(95, 18); 
+            u8g2.setCursor(95, 16 + pixeloffset); 
             u8g2.print(weatherTemp + "°C"); 
         } else {
-            u8g2.setCursor(5, 8); 
+            u8g2.setCursor(5, 8 + pixeloffset); 
             u8g2.print("获取中");
         }
     } else {
-        u8g2.setCursor(5, 8); 
+        u8g2.setCursor(5, 8 + pixeloffset); 
         u8g2.print("未连网");
     }
     u8g2.sendBuffer();
@@ -224,27 +247,37 @@ void drawClock(bool isInitialDisplay) {
 
 void drawCommonMenu(uint16_t ic1, uint16_t ic2, uint16_t ic3 = 0) {
     u8g2.clearBuffer();
-    const char* dynamicTitle = "夜鹭";
-    if (currentPage == PAGE_MENU_MAIN) dynamicTitle = (menuIndex == 0 ? "设置" : "应用");
-    else if (currentPage == PAGE_MENU_SET)  dynamicTitle = (menuIndex == 0 ? "网络" : "屏幕");
-    else if (currentPage == PAGE_SUB_NET) {
-        if (menuIndex == 0) dynamicTitle = "状态";
-        else if (menuIndex == 1) dynamicTitle = "连接";
+    
+    const char* dynamicTitle;
+    switch (currentPage) {
+        case PAGE_MENU_MAIN:  dynamicTitle = (menuIndex == 0 ? "设置" : "应用"); break;
+        case PAGE_MENU_SET:   dynamicTitle = (menuIndex == 0 ? "网络" : "屏幕"); break;
+        case PAGE_SUB_NET:    dynamicTitle = (menuIndex == 0 ? "状态" : "连接"); break;
+        case PAGE_SUB_SCR:    dynamicTitle = (menuIndex == 0 ? "亮度" : "息屏"); break;
+        default:              dynamicTitle = "夜鹭";
     }
-    else if (currentPage == PAGE_SUB_SCR) dynamicTitle = (menuIndex == 0 ? "亮度" : "息屏");
+
+    auto inBounds = [](float x) { return x < 155 && x > -35; };
+
     u8g2.setFont(u8g2_font_open_iconic_all_2x_t);
-    if (menuX[0] < 155 && menuX[0] > -35) u8g2.drawGlyph((int)menuX[0], 7, ic1);
-    if (menuX[1] < 155 && menuX[1] > -35) u8g2.drawGlyph((int)menuX[1], 7, ic2);
-    if (ic3 && menuX[2] < 155 && menuX[2] > -35) u8g2.drawGlyph((int)menuX[2], 7, ic3);
-    if (frameX < 155 && frameX > -35) u8g2.drawFrame((int)frameX - 4, 4, 24, 24);
-    u8g2.setDrawColor(0); u8g2.drawBox(0, 0, 50, 32); u8g2.setDrawColor(1);
+    uint16_t icons[] = {ic1, ic2, ic3};
+    for (int i = 0; i < 3; i++) {
+        if (icons[i] && inBounds(menuX[i])) u8g2.drawGlyph((int)menuX[i], 7, icons[i]);
+    }
+    if (inBounds(frameX)) u8g2.drawFrame((int)frameX - 4, 4, 24, 24);
+
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(0, 0, 50, 32);
+    u8g2.setDrawColor(1);
+    
     u8g2.setFont(u8g2_font_wqy16_t_gb2312);
-    u8g2.setCursor(5, 8); u8g2.print(dynamicTitle);
+    u8g2.setCursor(5, 8);
+    u8g2.print(dynamicTitle);
+
     if (currentPage == PAGE_SUB_SCR) {
         u8g2.setFont(u8g2_font_6x10_tf);
-        u8g2.setCursor(5, 22);
-        if (menuIndex == 0) u8g2.printf("LV %d", contrastIdx + 1);
-        else u8g2.printf("%ds", sleepTimeOptions[sleepIdx]);
+        u8g2.setCursor(5, 20 + pixeloffset);
+        u8g2.print(menuIndex == 0 ? (String("LV ") + (contrastIdx + 1)).c_str() : (String("") + sleepTimeOptions[sleepIdx] + "s").c_str());
     }
     u8g2.sendBuffer();
 }
@@ -270,4 +303,26 @@ void updateAnimation() {
         // 逐渐回到中心位置
         targetAppScrollX = 0;
     }
+}
+
+// 计算器应用
+void drawCalculator() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2.setCursor(5, 8);
+    u8g2.print("计算器");
+    u8g2.setCursor(5, 22);
+    u8g2.print("功能开发中");
+    u8g2.sendBuffer();
+}
+
+// 中国农历应用
+void drawLunarCalendar() {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2.setCursor(0, 0 + pixeloffset);
+    u8g2.print(lunarData);
+    u8g2.setCursor(0, 16 + pixeloffset);
+    u8g2.print(festival);
+    u8g2.sendBuffer();
 }

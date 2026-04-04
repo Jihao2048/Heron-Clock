@@ -1,121 +1,174 @@
 #include "engine.h"
-#include "applist.h"
 
-U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE); 
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 PageState currentPage = PAGE_CLOCK;
 bool isSleep = false;
 String weatherText = "--", weatherTemp = "--";
-int menuIndex = 0;
 uint8_t contrastValues[] = {10, 80, 160, 255}, contrastIdx = 2, sleepIdx = 0;
-int sleepTimeOptions[] = {30, 60, 0}; 
-unsigned long lastOperateTime = 0, lastAnimTime = 0, lastClockUpdate = 0;
+int sleepTimeOptions[] = {30, 60, 0};
+volatile int64_t hardwareTimerCount = 0;
+int64_t lastOperateTime = 0, lastAnimTime = 0, lastClockUpdate = 0;
+bool timerInitialized = false;
+esp_timer_handle_t periodicTimer = NULL;
+
 float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160;
 bool needsViewCountRefresh = false;
 bool isFirstClockDisplay = true;
 bool connectedDuringInit = false;
+int menuIndex = 0;
 int currentAppIndex = 0;
+int targetAppIndex = 0;
+float appScrollX = 0;
+float targetAppScrollX = 0;
+bool isAppScrolling = false;
+const int btnPins[] = {BTN_LEFT, BTN_CONFIRM, BTN_RIGHT, BTN_BACK, BTN_SLEEP};
+const int btnCount = 5;
+volatile bool btnPressedFlags[5] = {false, false, false, false, false};
+int64_t lastInterruptTime = 0;
 
-// 应用列表定义
-const char* appsList[] = {"计算器", "中国农历", "播放量"};
+static int64_t getHardwareTime() {
+    return hardwareTimerCount;
+}
+
+static void timerCallback(void* arg) {
+    hardwareTimerCount += 1000;
+}
+
+void initHardwareTimer() {
+    esp_timer_init();
+    esp_timer_create_args_t timerArgs = {
+        .callback = &timerCallback,
+        .name = "PeriodicTimer"
+    };
+    esp_timer_create(&timerArgs, &periodicTimer);
+    esp_timer_start_periodic(periodicTimer, 1000);
+    timerInitialized = true;
+}
+
+const char* appsList[] = {"设置", "中国农历", "播放量"};
 const int maxApps = sizeof(appsList) / sizeof(appsList[0]);
 
-bool isButtonPressed(int pin) {
-    if (digitalRead(pin) == LOW) {
-        delay(20);
-        if (digitalRead(pin) == LOW) {
-            lastOperateTime = millis();
-            while(digitalRead(pin) == LOW) delay(1);
-            return true;
+void IRAM_ATTR handleButtonInterrupt() {
+    int64_t interruptTime = getHardwareTime();
+    if (interruptTime - lastInterruptTime > 200000) {
+        for (int i = 0; i < btnCount; i++) {
+            if (digitalRead(btnPins[i]) == LOW) {
+                btnPressedFlags[i] = true;
+                lastOperateTime = interruptTime;
+            }
         }
+        lastInterruptTime = interruptTime;
+    }
+}
+
+bool checkBtn(int btnIndex) {
+    if (btnPressedFlags[btnIndex]) {
+        btnPressedFlags[btnIndex] = false;
+        return true;
     }
     return false;
 }
 
 void setup() {
+    initHardwareTimer();
+    
     u8g2.begin();
     u8g2.enableUTF8Print();
-    u8g2.setFontPosTop(); 
+    u8g2.setFontPosTop();
     u8g2.setContrast(contrastValues[contrastIdx]);
-    int pins[] = {BTN_CONFIRM, BTN_RIGHT, BTN_LEFT, BTN_BACK, BTN_SLEEP};
-    for(int p : pins) pinMode(p, INPUT_PULLUP);
+
+    for (int i = 0; i < btnCount; i++) {
+        pinMode(btnPins[i], INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(btnPins[i]), handleButtonInterrupt, FALLING);
+    }
+
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    unsigned long startT = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startT < 15000) {
+    int64_t startT = getHardwareTime();
+    while (WiFi.status() != WL_CONNECTED && getHardwareTime() - startT < 15000000) {
         u8g2.clearBuffer();
         drawLoadingBar();
         u8g2.sendBuffer();
     }
+
     if (WiFi.status() == WL_CONNECTED) {
         configTime(28800, 0, "time.apple.com");
-        unsigned long timeSyncStart = millis();
         struct tm timeinfo;
-        while (!getLocalTime(&timeinfo, 100) && (millis() - timeSyncStart < 2000)) {
+        int64_t timeSyncStart = getHardwareTime();
+        while (!getLocalTime(&timeinfo, 100) && (getHardwareTime() - timeSyncStart < 2000000)) {
             delay(100);
         }
         updateWeather();
+        updateLunar();
+        updateView();
         connectedDuringInit = true;
     } else {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
     }
-    lastOperateTime = millis();
+
+    lastOperateTime = getHardwareTime();
+    gpio_wakeup_enable((gpio_num_t)BTN_SLEEP, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
 }
 
 void loop() {
+    // 自动休眠检测
     if (sleepTimeOptions[sleepIdx] != 0 && !isSleep) {
-        if (millis() - lastOperateTime > (unsigned long)sleepTimeOptions[sleepIdx] * 1000) {
-            unsigned long animStart = millis();
-            while (millis() - animStart < 450) {
-                u8g2.clearBuffer();
-                drawLoadingBar();
-                u8g2.sendBuffer();
-            }
-            isSleep = true; 
+        if (getHardwareTime() - lastOperateTime > (int64_t)sleepTimeOptions[sleepIdx] * 1000000) {
+            isSleep = true;
             u8g2.setPowerSave(1);
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
         }
     }
-    if (isButtonPressed(BTN_SLEEP)) { 
-        bool wasSleeping = isSleep;
-        isSleep = !isSleep; 
-        if (!wasSleeping && isSleep) { 
-            unsigned long animStart = millis();
-            while (millis() - animStart < 450) {
-                u8g2.clearBuffer();
-                drawLoadingBar();
-                u8g2.sendBuffer();
-            }
-        }
+
+    // 睡眠键逻辑
+    if (checkBtn(4)) {
+        isSleep = !isSleep;
         u8g2.setPowerSave(isSleep);
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_OFF);
-        if (wasSleeping && !isSleep) {
+        if (isSleep) {
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+        } else {
+            lastOperateTime = getHardwareTime();
         }
     }
+
     if (isSleep) return;
+
+    // 详情页返回逻辑
     if (currentPage == PAGE_STATUS_DETAIL) {
-        if (isButtonPressed(BTN_CONFIRM) || isButtonPressed(BTN_BACK) || isButtonPressed(BTN_LEFT) || isButtonPressed(BTN_RIGHT)) {
+        if (checkBtn(1) || checkBtn(3) || checkBtn(0) || checkBtn(2)) {
             currentPage = PAGE_SUB_NET;
-            menuX[0] = -40; menuX[1] = -82; menuX[2] = -124; 
+            menuIndex = 0;
+            menuX[0] = -40; menuX[1] = -82; menuX[2] = -124;
         }
         drawStatusDetail();
-        return; 
+        return;
     }
-    if (isButtonPressed(BTN_CONFIRM)) {
+
+    // 1. 确认键 (Confirm)
+    if (checkBtn(1)) {
         bool needsResetAnim = true;
-        if (currentPage == PAGE_CLOCK) { currentPage = PAGE_MENU_MAIN; menuIndex = 0; }
+        if (currentPage == PAGE_CLOCK) { 
+            currentPage = PAGE_MENU_MAIN; 
+            menuIndex = 0; 
+        }
         else if (currentPage == PAGE_MENU_MAIN) { 
             if (menuIndex == 0) currentPage = PAGE_MENU_SET;
             else if (menuIndex == 1) { 
-                currentPage = PAGE_APPS;
-                needsViewCountRefresh = true;
+                currentPage = PAGE_APPS; 
+                needsViewCountRefresh = true; 
             }
+            menuIndex = 0; 
         }
-        else if (currentPage == PAGE_MENU_SET) { currentPage = (menuIndex == 0 ? PAGE_SUB_NET : PAGE_SUB_SCR); menuIndex = 0; }
+        else if (currentPage == PAGE_MENU_SET) { 
+            currentPage = (menuIndex == 0 ? PAGE_SUB_NET : PAGE_SUB_SCR); 
+            menuIndex = 0; 
+        }
         else if (currentPage == PAGE_SUB_NET) {
             if (menuIndex == 0) { currentPage = PAGE_STATUS_DETAIL; needsResetAnim = false; }
-            else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; connectedDuringInit = true;}
+            else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; }
         }
         else if (currentPage == PAGE_SUB_SCR) {
             if (menuIndex == 0) { contrastIdx = (contrastIdx + 1) % 4; u8g2.setContrast(contrastValues[contrastIdx]); }
@@ -123,68 +176,71 @@ void loop() {
             needsResetAnim = false;
         }
         else if (currentPage == PAGE_APPS) {
+            if (currentAppIndex == 0) currentPage = PAGE_APP_CALCULATOR;
+            else if (currentAppIndex == 1) currentPage = PAGE_APP_LUNAR;
+            else if (currentAppIndex == 2) currentPage = PAGE_APP_VIEWCOUNT;
             needsViewCountRefresh = true;
             needsResetAnim = false;
         }
-        if (needsResetAnim) { menuX[0]=160; menuX[1]=202; menuX[2]=244; }
+
+        if (needsResetAnim) { menuX[0] = 160; menuX[1] = 202; menuX[2] = 244; }
     }
-    if (isButtonPressed(BTN_BACK)) {
+
+    // 2. 返回键 (Back)
+    if (checkBtn(3)) {
         if (currentPage == PAGE_MENU_MAIN) currentPage = PAGE_CLOCK;
-        else if (currentPage == PAGE_APPS) currentPage = PAGE_MENU_MAIN;
+        else if (currentPage == PAGE_APPS) { currentPage = PAGE_MENU_MAIN; menuIndex = 1; }
+        else if (currentPage >= PAGE_APP_CALCULATOR) currentPage = PAGE_APPS;
         else {
             if (currentPage >= PAGE_SUB_NET) currentPage = PAGE_MENU_SET;
             else if (currentPage == PAGE_MENU_SET) currentPage = PAGE_MENU_MAIN;
-            menuX[0] = -40; menuX[1] = -82; menuX[2] = -124;
+            menuIndex = 0;
         }
-        menuIndex = 0;
+        menuX[0] = -40; menuX[1] = -82; menuX[2] = -124; // 统一返回动画
     }
-    int maxIdx = (currentPage == PAGE_SUB_NET) ? 1 : (currentPage == PAGE_MENU_MAIN) ? 1 : 1; 
-    if (isButtonPressed(BTN_RIGHT)) {
+
+    // 3. 左右切换逻辑
+    int maxIdx = 1; // 默认双选项菜单
+    if (checkBtn(2)) { // Next
         if (currentPage == PAGE_APPS) {
-            // 允许在动画播放过程中立即切换
             targetAppIndex = (currentAppIndex + 1) % maxApps;
-            targetAppScrollX = -128;  // 向左滚动
+            targetAppScrollX = -128;
             scrollDirection = SCROLL_LEFT;
             isAppScrolling = true;
-            needsViewCountRefresh = true;
         } else {
             menuIndex = (menuIndex + 1) % (maxIdx + 1);
         }
     }
-    if (isButtonPressed(BTN_LEFT)) {
+    if (checkBtn(0)) { // Prev
         if (currentPage == PAGE_APPS) {
-            // 允许在动画播放过程中立即切换
             targetAppIndex = (currentAppIndex - 1 + maxApps) % maxApps;
-            targetAppScrollX = 128;   // 向右滚动
+            targetAppScrollX = 128;
             scrollDirection = SCROLL_RIGHT;
             isAppScrolling = true;
-            needsViewCountRefresh = true;
         } else {
             menuIndex = (menuIndex - 1 + (maxIdx + 1)) % (maxIdx + 1);
         }
     }
-    unsigned long now = millis();
-    lastAnimTime = now;
+
+    // 动画与渲染
     updateAnimation();
+    int64_t now = getHardwareTime();
+
     if (currentPage == PAGE_CLOCK) {
-        if (menuX[0] < 140 && menuX[0] > -30) drawCommonMenu(0, 0); 
-        else if (now - lastClockUpdate >= 500) { 
-            lastClockUpdate = now; 
-            if (isFirstClockDisplay) {
-                drawClock(true);
-                isFirstClockDisplay = false;
-            } else {
-                drawClock(false);
-            }
+        if (menuX[0] < 140 && menuX[0] > -30) drawCommonMenu(0, 0);
+        else if (now - lastClockUpdate >= 500000) {
+            lastClockUpdate = now;
+            drawClock(isFirstClockDisplay);
+            isFirstClockDisplay = false;
         }
     } else {
         if (currentPage == PAGE_MENU_MAIN) drawCommonMenu(129, 171);
-        else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222); 
+        else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222);
         else if (currentPage == PAGE_SUB_NET) drawCommonMenu(238, 84);
         else if (currentPage == PAGE_SUB_SCR) drawCommonMenu(137, 123);
-        else if (currentPage == PAGE_APPS) {
-            drawAppsPage(); 
-        }
+        else if (currentPage == PAGE_APPS) drawAppsPage();
+        else if (currentPage == PAGE_APP_CALCULATOR) drawCalculator();
+        else if (currentPage == PAGE_APP_LUNAR) drawLunarCalendar();
+        else if (currentPage == PAGE_APP_VIEWCOUNT) drawView();
     }
-    delay(5);
 }
