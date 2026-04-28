@@ -56,9 +56,10 @@ void updateLunar() {
             String day = doc["data"]["lunar_day_chinese"].as<String>();
             String week = doc["data"]["week_name"].as<String>();
             String luck = doc["data"]["xiu_luck"].as<String>();
-            String year = doc["data"]["lunar_year_chinese"].as<String>();
-            lunarData = year + month + day;
-            lunarOthers = week + luck;
+            String year = doc["data"]["ganzhi_year"].as<String>();
+            String animal = doc["data"]["animal"].as<String>();
+            lunarData = year + animal + "年" + month + day;
+            lunarOthers = week + " " + luck;
         } else {
             lunarData = "API错误";
         }
@@ -114,7 +115,7 @@ void drawView() {
 // 应用页面
 void drawAppsPage() {
     u8g2.clearBuffer();
-    
+    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
     // 平滑滚动动画
     float easing = 0.3;  // 加快动画速度
     float prevScrollX = appScrollX;
