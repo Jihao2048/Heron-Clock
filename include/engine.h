@@ -143,7 +143,7 @@ void drawAppsPage() {
     
     // 绘制应用（实现滚动效果）
     int baseX = (int)appScrollX;
-    int y = 8 + pixeloffset;
+    int y = 8;
     
     // 根据滚动方向绘制不同的应用组合
     if (scrollDirection == SCROLL_LEFT) {
