@@ -13,14 +13,12 @@
 #define WIFI_PASS "manifest"
 
 enum PageState { 
-    PAGE_CLOCK,
-    PAGE_MENU_MAIN, 
+    PAGE_CLOCK, 
     PAGE_MENU_SET, 
     PAGE_SUB_NET, 
     PAGE_SUB_SCR, 
     PAGE_STATUS_DETAIL, 
     PAGE_APPS, 
-    PAGE_APP_CALCULATOR, 
     PAGE_APP_LUNAR, 
     PAGE_APP_VIEWCOUNT };
 enum ScrollDirection { 
@@ -37,7 +35,6 @@ extern uint8_t contrastValues[], contrastIdx, sleepIdx;
 extern int sleepTimeOptions[];
 extern int64_t lastOperateTime, lastAnimTime, lastClockUpdate;
 extern float menuX[3], targetX[3], frameX, scrollX;
-extern bool needsViewCountRefresh;
 extern bool connectedDuringInit;
 extern int currentAppIndex;
 extern int targetAppIndex;
@@ -47,26 +44,10 @@ extern const char* appsList[];
 extern const int maxApps;
 extern ScrollDirection scrollDirection;
 extern volatile bool btnPressedFlags[];
-extern String lunarData;
 String ViewCount = "--";
 String Title = "标题";
-String lunarData = "数据";
-String festival = "节日";
-String bvid = "BV1LxF4znEwU";
+String lunarData = "--";
+String lunarOthers = "--";
+String bvid = "BV1KEojBeEDi";
 int pixeloffset = 2;
 ScrollDirection scrollDirection = SCROLL_NONE;
-//在这里填写你家附近大集开放的日期
-extern String marketdayList[12] = {
-    "初二",
-    "初四",
-    "初七",
-    "初九",
-    "十二",
-    "十四",
-    "十七",
-    "十九",
-    "廿二",
-    "廿四"
-    "廿七"
-    "廿九"
-};

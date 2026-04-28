@@ -54,10 +54,11 @@ void updateLunar() {
         if(doc["code"].as<int>() == 200) {
             String month = doc["data"]["lunar_month_chinese"].as<String>();
             String day = doc["data"]["lunar_day_chinese"].as<String>();
-            String festival = doc["data"]["festival"].as<String>();
+            String week = doc["data"]["week_name"].as<String>();
             String luck = doc["data"]["xiu_luck"].as<String>();
-            lunarData = month + day + "  " + luck;
-            festival = festival;
+            String year = doc["data"]["lunar_year_chinese"].as<String>();
+            lunarData = year + month + day;
+            lunarOthers = week + luck;
         } else {
             lunarData = "API错误";
         }
@@ -99,6 +100,7 @@ void updateView() {
     http.end();
 }
 
+// 视频播放量页面
 void drawView() {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_wqy16_t_gb2312);
@@ -109,10 +111,9 @@ void drawView() {
     u8g2.sendBuffer();
     }
 
-
+// 应用页面
 void drawAppsPage() {
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
     
     // 平滑滚动动画
     float easing = 0.3;  // 加快动画速度
@@ -142,7 +143,7 @@ void drawAppsPage() {
     
     // 绘制应用（实现滚动效果）
     int baseX = (int)appScrollX;
-    int y = 8;
+    int y = 8 + pixeloffset;
     
     // 根据滚动方向绘制不同的应用组合
     if (scrollDirection == SCROLL_LEFT) {
@@ -193,6 +194,9 @@ void reconnectWiFi() {
         updateLunar();
         updateView();
         delay(1000);
+    } else {
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
     }
 }
 
@@ -250,11 +254,9 @@ void drawCommonMenu(uint16_t ic1, uint16_t ic2, uint16_t ic3 = 0) {
     
     const char* dynamicTitle;
     switch (currentPage) {
-        case PAGE_MENU_MAIN:  dynamicTitle = (menuIndex == 0 ? "设置" : "应用"); break;
         case PAGE_MENU_SET:   dynamicTitle = (menuIndex == 0 ? "网络" : "屏幕"); break;
         case PAGE_SUB_NET:    dynamicTitle = (menuIndex == 0 ? "状态" : "连接"); break;
         case PAGE_SUB_SCR:    dynamicTitle = (menuIndex == 0 ? "亮度" : "息屏"); break;
-        default:              dynamicTitle = "夜鹭";
     }
 
     auto inBounds = [](float x) { return x < 155 && x > -35; };
@@ -305,17 +307,6 @@ void updateAnimation() {
     }
 }
 
-// 计算器应用
-void drawCalculator() {
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_wqy16_t_gb2312);
-    u8g2.setCursor(5, 8);
-    u8g2.print("计算器");
-    u8g2.setCursor(5, 22);
-    u8g2.print("功能开发中");
-    u8g2.sendBuffer();
-}
-
 // 中国农历应用
 void drawLunarCalendar() {
     u8g2.clearBuffer();
@@ -323,6 +314,6 @@ void drawLunarCalendar() {
     u8g2.setCursor(0, 0 + pixeloffset);
     u8g2.print(lunarData);
     u8g2.setCursor(0, 16 + pixeloffset);
-    u8g2.print(festival);
+    u8g2.print(lunarOthers);
     u8g2.sendBuffer();
 }

@@ -12,7 +12,6 @@ bool timerInitialized = false;
 esp_timer_handle_t periodicTimer = NULL;
 
 float menuX[3] = {160, 160, 160}, targetX[3] = {65, 107, 149}, frameX = 160;
-bool needsViewCountRefresh = false;
 bool isFirstClockDisplay = true;
 bool connectedDuringInit = false;
 int menuIndex = 0;
@@ -45,7 +44,7 @@ void initHardwareTimer() {
     timerInitialized = true;
 }
 
-const char* appsList[] = {"设置", "中国农历", "播放量"};
+const char* appsList[] = {"中国农历", "播放量", "设置"};
 const int maxApps = sizeof(appsList) / sizeof(appsList[0]);
 
 void IRAM_ATTR handleButtonInterrupt() {
@@ -129,8 +128,10 @@ void loop() {
         if (isSleep) {
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
+            setCpuFrequencyMhz(40);
         } else {
             lastOperateTime = getHardwareTime();
+            setCpuFrequencyMhz(160);
         }
     }
 
@@ -150,65 +151,87 @@ void loop() {
     // 1. 确认键 (Confirm)
     if (checkBtn(1)) {
         bool needsResetAnim = true;
-        if (currentPage == PAGE_CLOCK) { 
-            currentPage = PAGE_MENU_MAIN; 
-            menuIndex = 0; 
+        switch (currentPage) {
+            case PAGE_CLOCK:
+                currentPage = PAGE_APPS;
+                menuIndex = 0;
+                break;
+            case PAGE_MENU_SET:
+                currentPage = (menuIndex == 0) ? PAGE_SUB_NET : PAGE_SUB_SCR;
+                menuIndex = 0;
+                break;
+            case PAGE_SUB_NET:
+                if (menuIndex == 0) {
+                    currentPage = PAGE_STATUS_DETAIL;
+                } else {
+                    reconnectWiFi();
+                }
+                needsResetAnim = false;
+                break;
+            case PAGE_SUB_SCR:
+                if (menuIndex == 0) {
+                    contrastIdx = (contrastIdx + 1) % 4;
+                    u8g2.setContrast(contrastValues[contrastIdx]);
+                } else {
+                    sleepIdx = (sleepIdx + 1) % 3;
+                }
+                needsResetAnim = false;
+                break;
+            case PAGE_APPS:
+                if (currentAppIndex == 0) currentPage = PAGE_APP_LUNAR;
+                else if (currentAppIndex == 1) currentPage = PAGE_APP_VIEWCOUNT;
+                else if (currentAppIndex == 2) currentPage = PAGE_MENU_SET;
+                needsResetAnim = false;
+                break;
+            case PAGE_APP_LUNAR:
+            case PAGE_APP_VIEWCOUNT:
+                currentPage = PAGE_APPS;
+                menuIndex = 0;
+                break;
+            default:
+                break;
         }
-        else if (currentPage == PAGE_MENU_MAIN) { 
-            if (menuIndex == 0) currentPage = PAGE_MENU_SET;
-            else if (menuIndex == 1) { 
-                currentPage = PAGE_APPS; 
-                needsViewCountRefresh = true; 
-            }
-            menuIndex = 0; 
-        }
-        else if (currentPage == PAGE_MENU_SET) { 
-            currentPage = (menuIndex == 0 ? PAGE_SUB_NET : PAGE_SUB_SCR); 
-            menuIndex = 0; 
-        }
-        else if (currentPage == PAGE_SUB_NET) {
-            if (menuIndex == 0) { currentPage = PAGE_STATUS_DETAIL; needsResetAnim = false; }
-            else if (menuIndex == 1) { reconnectWiFi(); needsResetAnim = false; }
-        }
-        else if (currentPage == PAGE_SUB_SCR) {
-            if (menuIndex == 0) { contrastIdx = (contrastIdx + 1) % 4; u8g2.setContrast(contrastValues[contrastIdx]); }
-            else { sleepIdx = (sleepIdx + 1) % 3; }
-            needsResetAnim = false;
-        }
-        else if (currentPage == PAGE_APPS) {
-            if (currentAppIndex == 0) currentPage = PAGE_APP_CALCULATOR;
-            else if (currentAppIndex == 1) currentPage = PAGE_APP_LUNAR;
-            else if (currentAppIndex == 2) currentPage = PAGE_APP_VIEWCOUNT;
-            needsViewCountRefresh = true;
-            needsResetAnim = false;
-        }
-
         if (needsResetAnim) { menuX[0] = 160; menuX[1] = 202; menuX[2] = 244; }
     }
 
     // 2. 返回键 (Back)
     if (checkBtn(3)) {
-        if (currentPage == PAGE_MENU_MAIN) currentPage = PAGE_CLOCK;
-        else if (currentPage == PAGE_APPS) { currentPage = PAGE_MENU_MAIN; menuIndex = 1; }
-        else if (currentPage >= PAGE_APP_CALCULATOR) currentPage = PAGE_APPS;
-        else {
-            if (currentPage >= PAGE_SUB_NET) currentPage = PAGE_MENU_SET;
-            else if (currentPage == PAGE_MENU_SET) currentPage = PAGE_MENU_MAIN;
-            menuIndex = 0;
+        switch (currentPage) {
+            case PAGE_MENU_SET:
+                currentPage = PAGE_APPS;
+                break;
+            case PAGE_SUB_NET:
+            case PAGE_SUB_SCR:
+                currentPage = PAGE_MENU_SET;
+                menuIndex = 0;
+                break;
+            case PAGE_STATUS_DETAIL:
+                currentPage = PAGE_SUB_NET;
+                menuIndex = 0;
+                break;
+            case PAGE_APPS:
+                currentPage = PAGE_CLOCK;
+                break;
+            case PAGE_APP_LUNAR:
+            case PAGE_APP_VIEWCOUNT:
+                currentPage = PAGE_APPS;
+                menuIndex = 0;
+                break;
+            default:
+                break;
         }
-        menuX[0] = -40; menuX[1] = -82; menuX[2] = -124; // 统一返回动画
+        menuX[0] = -40; menuX[1] = -82; menuX[2] = -124;
     }
 
     // 3. 左右切换逻辑
-    int maxIdx = 1; // 默认双选项菜单
     if (checkBtn(2)) { // Next
         if (currentPage == PAGE_APPS) {
             targetAppIndex = (currentAppIndex + 1) % maxApps;
             targetAppScrollX = -128;
             scrollDirection = SCROLL_LEFT;
             isAppScrolling = true;
-        } else {
-            menuIndex = (menuIndex + 1) % (maxIdx + 1);
+        } else if (currentPage >= PAGE_MENU_SET && currentPage <= PAGE_SUB_SCR) {
+            menuIndex = (menuIndex + 1) % 2;
         }
     }
     if (checkBtn(0)) { // Prev
@@ -217,8 +240,8 @@ void loop() {
             targetAppScrollX = 128;
             scrollDirection = SCROLL_RIGHT;
             isAppScrolling = true;
-        } else {
-            menuIndex = (menuIndex - 1 + (maxIdx + 1)) % (maxIdx + 1);
+        } else if (currentPage >= PAGE_MENU_SET && currentPage <= PAGE_SUB_SCR) {
+            menuIndex = (menuIndex - 1 + 2) % 2;
         }
     }
 
@@ -234,13 +257,27 @@ void loop() {
             isFirstClockDisplay = false;
         }
     } else {
-        if (currentPage == PAGE_MENU_MAIN) drawCommonMenu(129, 171);
-        else if (currentPage == PAGE_MENU_SET) drawCommonMenu(248, 222);
-        else if (currentPage == PAGE_SUB_NET) drawCommonMenu(238, 84);
-        else if (currentPage == PAGE_SUB_SCR) drawCommonMenu(137, 123);
-        else if (currentPage == PAGE_APPS) drawAppsPage();
-        else if (currentPage == PAGE_APP_CALCULATOR) drawCalculator();
-        else if (currentPage == PAGE_APP_LUNAR) drawLunarCalendar();
-        else if (currentPage == PAGE_APP_VIEWCOUNT) drawView();
+        switch (currentPage) {
+            case PAGE_SUB_NET:
+                drawCommonMenu(238, 84);
+                break;
+            case PAGE_SUB_SCR:
+                drawCommonMenu(137, 123);
+                break;
+            case PAGE_APPS:
+                drawAppsPage();
+                break;
+            case PAGE_MENU_SET:
+                drawCommonMenu(248, 222);
+                break;
+            case PAGE_APP_LUNAR:
+                drawLunarCalendar();
+                break;
+            case PAGE_APP_VIEWCOUNT:
+                drawView();
+                break;
+            default:
+                break;
+        }
     }
 }
