@@ -45,7 +45,7 @@ extern const int maxApps;
 extern ScrollDirection scrollDirection;
 extern volatile bool btnPressedFlags[];
 String ViewCount = "--";
-String Title = "标题";
+String Title = "--";
 String lunarData = "--";
 String lunarOthers = "--";
 String bvid = "BV1KEojBeEDi";

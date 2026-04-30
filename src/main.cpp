@@ -100,6 +100,7 @@ void setup() {
         updateLunar();
         updateView();
         connectedDuringInit = true;
+        
     } else {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);

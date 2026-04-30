@@ -40,7 +40,7 @@ void updateWeather() {
 }
 
 void updateLunar() {
-    if (WiFi.status() != WL_CONNECTED) {
+    if (connectedDuringInit == false) {
         lunarData = "网络未连接";
         return;
     }
